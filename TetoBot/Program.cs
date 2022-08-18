@@ -4,6 +4,6 @@ using TetoBot;
 
 Console.WriteLine("Hello, World!");
 
-await using var bot = new Bot();
+await using var bot = new Bot(args[0]);
 await bot.RunAsync();
 await Task.Delay(-1);

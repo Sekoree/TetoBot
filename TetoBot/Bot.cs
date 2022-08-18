@@ -10,11 +10,11 @@ public class Bot : IDisposable, IAsyncDisposable
     private DiscordClient client { get; set; }
     private bool initialized { get; set; } = false;
 
-    public Bot()
+    public Bot(string token)
     {
         var clientConfig = new DiscordConfiguration()
         {
-            Token = "Token Here",
+            Token = token,
             TokenType = TokenType.Bot,
             Intents = DiscordIntents.GuildVoiceStates | DiscordIntents.Guilds,
             MinimumLogLevel = LogLevel.Information
@@ -138,7 +138,18 @@ public class Bot : IDisposable, IAsyncDisposable
     private Task OnReady(DiscordClient sender, ReadyEventArgs e)
     {
         client.Logger.Log(LogLevel.Information, "Connected to Discord!");
+        _ = Task.Run(SetBotStatusAsync);
         return Task.CompletedTask;
+    }
+    
+    public async Task SetBotStatusAsync()
+    {
+        while (true)
+        {
+            var activity = new DiscordActivity("TETO TETO TETO TETO TETO...", ActivityType.Playing);
+            await client.UpdateStatusAsync(activity);
+            await Task.Delay(TimeSpan.FromMinutes(30));
+        }
     }
 
     
