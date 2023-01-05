@@ -9,6 +9,8 @@ public class Bot : IDisposable, IAsyncDisposable
 {
     private DiscordClient client { get; set; }
     private bool initialized { get; set; } = false;
+    public static string Presence = "TETO TETO TETO TETO TETO...";
+    public static bool PresenceChanged = false;
 
     public Bot(string token)
     {
@@ -146,9 +148,16 @@ public class Bot : IDisposable, IAsyncDisposable
     {
         while (true)
         {
-            var activity = new DiscordActivity("TETO TETO TETO TETO TETO...", ActivityType.Playing);
+            var activity = new DiscordActivity(Presence, ActivityType.Playing);
             await client.UpdateStatusAsync(activity);
-            await Task.Delay(TimeSpan.FromMinutes(30));
+            var mins = TimeSpan.Zero;
+            while (mins.TotalMinutes < 30.0 && !PresenceChanged)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(7.5));
+                mins += TimeSpan.FromSeconds(7.5);
+            }
+
+            PresenceChanged = false;
         }
     }
 

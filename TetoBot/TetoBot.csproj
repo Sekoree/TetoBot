@@ -8,7 +8,8 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <PackageReference Include="DisCatSharp" Version="10.0.0" />
+      <PackageReference Include="DisCatSharp" Version="10.3.2" />
+      <PackageReference Include="DisCatSharp.ApplicationCommands" Version="10.3.2" />
     </ItemGroup>
 
 </Project>
