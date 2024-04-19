@@ -1,4 +1,5 @@
 ﻿using DisCatSharp;
+using DisCatSharp.ApplicationCommands;
 using DisCatSharp.Entities;
 using DisCatSharp.EventArgs;
 using Microsoft.Extensions.Logging;
@@ -7,10 +8,10 @@ namespace TetoBot;
 
 public class Bot : IDisposable, IAsyncDisposable
 {
-    private DiscordClient client { get; set; }
-    private bool initialized { get; set; } = false;
+    private DiscordClient _client;
+    private ApplicationCommandsExtension _commands;
+    private bool _initialized = false;
     public static string Presence = "TETO TETO TETO TETO TETO...";
-    public static bool PresenceChanged = false;
 
     public Bot(string token)
     {
@@ -21,10 +22,11 @@ public class Bot : IDisposable, IAsyncDisposable
             Intents = DiscordIntents.GuildVoiceStates | DiscordIntents.Guilds,
             MinimumLogLevel = LogLevel.Information
         };
-        client = new DiscordClient(clientConfig);
-        client.Ready += OnReady;
-        client.GuildAvailable += OnGuildAvailable;
-        client.VoiceStateUpdated += OnVoiceStateUpdated;
+        _client = new DiscordClient(clientConfig);
+        _client.Ready += OnReady;
+        _client.GuildAvailable += OnGuildAvailable;
+        _client.VoiceStateUpdated += OnVoiceStateUpdated;
+        _commands =_client.UseApplicationCommands();
     }
 
     private Task OnGuildAvailable(DiscordClient sender, GuildCreateEventArgs e)
@@ -41,11 +43,12 @@ public class Bot : IDisposable, IAsyncDisposable
 
     private Task OnVoiceStateUpdated(DiscordClient sender, VoiceStateUpdateEventArgs e)
     {
-        if (!initialized)
+        if (!_initialized)
         {
             sender.Logger.LogInformation("Voice state updated: {UserName} while not initialized", e.User.Username);
             return Task.CompletedTask;
         }
+
         //check if user left voice channel
         if (e.Before?.Channel != null && e.After?.Channel == null)
         {
@@ -58,7 +61,7 @@ public class Bot : IDisposable, IAsyncDisposable
             sender.Logger.LogDebug("User joined voice channel: {UserName}", e.User.Username);
             _ = Task.Run(() => HandleAddRole(e));
         }
-        
+
         return Task.CompletedTask;
     }
 
@@ -69,11 +72,11 @@ public class Bot : IDisposable, IAsyncDisposable
             var role = e.Guild.GetRole(1007978361223643196);
             var userAsMember = await e.Guild.GetMemberAsync(e.User.Id);
             await userAsMember.GrantRoleAsync(role);
-            client.Logger.LogInformation("Added voice role to {UserName}", e.User.Username);
+            _client.Logger.LogInformation("Added voice role to {UserName}", e.User.Username);
         }
         catch (Exception exception)
         {
-            client.Logger.LogError(exception, "Error adding role");
+            _client.Logger.LogError(exception, "Error adding role");
         }
     }
 
@@ -84,17 +87,17 @@ public class Bot : IDisposable, IAsyncDisposable
             var role = e.Guild.GetRole(1007978361223643196);
             var userAsMember = await e.Guild.GetMemberAsync(e.User.Id);
             await userAsMember.RevokeRoleAsync(role);
-            client.Logger.LogInformation("Removed voice role from {UserName}", e.User.Username);
+            _client.Logger.LogInformation("Removed voice role from {UserName}", e.User.Username);
         }
         catch (Exception exception)
         {
-            client.Logger.LogError(exception, "Error while removing role");
+            _client.Logger.LogError(exception, "Error while removing role");
         }
     }
 
     private async Task InitOnGuild(DiscordGuild g)
     {
-        client.Logger.LogInformation("Initializing on guild: {0}", g.Name);
+        _client.Logger.LogInformation("Initializing on guild: {0}", g.Name);
         try
         {
             var role = g.GetRole(1007978361223643196);
@@ -102,79 +105,64 @@ public class Bot : IDisposable, IAsyncDisposable
             var members = await g.GetAllMembersAsync();
             foreach (var member in members)
             {
-                if (member.VoiceState?.Channel != null 
+                if (member.VoiceState?.Channel != null
                     && member.Roles.All(x => x.Id != role.Id))
                 {
                     try
                     {
                         await member.GrantRoleAsync(role);
-                        client.Logger.LogInformation("{MemberUsername} has been added to the {RoleName} role", member.Username, role.Name);
+                        _client.Logger.LogInformation("{MemberUsername} has been added to the {RoleName} role",
+                            member.Username, role.Name);
                     }
                     catch (Exception e)
                     {
-                        client.Logger.LogError(e, "Error adding role to {MemberUsername}", member?.Username);
+                        _client.Logger.LogError(e, "Error adding role to {MemberUsername}", member?.Username);
                     }
                 }
-                else if (member.VoiceState?.Channel == null 
+                else if (member.VoiceState?.Channel == null
                          && member.Roles.Any(x => x.Id == role.Id))
                 {
                     try
                     {
                         await member.RevokeRoleAsync(role);
-                        client.Logger.LogInformation("{0} has been removed from the {1} role", member.Username, role.Name);
+                        _client.Logger.LogInformation("{0} has been removed from the {1} role", member.Username,
+                            role.Name);
                     }
                     catch (Exception e)
                     {
-                        client.Logger.LogError(e, "Error removing role from {MemberUsername}", member?.Username);
+                        _client.Logger.LogError(e, "Error removing role from {MemberUsername}", member?.Username);
                     }
                 }
             }
         }
         catch (Exception e)
         {
-            client.Logger.LogError(e, "Error initializing on guild: {GuildName}", g.Name);
+            _client.Logger.LogError(e, "Error initializing on guild: {GuildName}", g.Name);
         }
-        initialized = true;
+
+        _initialized = true;
     }
 
     private Task OnReady(DiscordClient sender, ReadyEventArgs e)
     {
-        client.Logger.Log(LogLevel.Information, "Connected to Discord!");
-        _ = Task.Run(SetBotStatusAsync);
+        _client.Logger.Log(LogLevel.Information, "Connected to Discord!");
+        _commands.RegisterGuildCommands<DevCommands>(588821508990959634);
         return Task.CompletedTask;
     }
-    
-    public async Task SetBotStatusAsync()
-    {
-        while (true)
-        {
-            var activity = new DiscordActivity(Presence, ActivityType.Playing);
-            await client.UpdateStatusAsync(activity);
-            var mins = TimeSpan.Zero;
-            while (mins.TotalMinutes < 30.0 && !PresenceChanged)
-            {
-                await Task.Delay(TimeSpan.FromSeconds(7.5));
-                mins += TimeSpan.FromSeconds(7.5);
-            }
 
-            PresenceChanged = false;
-        }
-    }
-
-    
     public async Task RunAsync()
     {
-        await client.ConnectAsync();
+        await _client.ConnectAsync(new DiscordActivity(Presence, ActivityType.Playing));
     }
 
 
-    public void Dispose() 
+    public void Dispose()
         => DisposeAsync().ConfigureAwait(false).GetAwaiter().GetResult();
 
     public async ValueTask DisposeAsync()
     {
-        await client.DisconnectAsync();
-        client.Dispose();
+        await _client.DisconnectAsync();
+        _client.Dispose();
         //throw new NotImplementedException();
     }
 }
